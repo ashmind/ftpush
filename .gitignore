@@ -1,0 +1,8 @@
+
+bin/
+obj/
+.vs/
+packages/
+*.suo
+*.user
+*.lock.json

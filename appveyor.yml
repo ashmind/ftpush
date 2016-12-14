@@ -1,3 +1,5 @@
+version: '{build}'
+
 before_build:
 - nuget restore
 
@@ -6,7 +8,7 @@ build:
   verbosity: minimal
 
 after_build:
-- ps: nuget-pack
+- ps: .\nuget-pack.bat
 
 artifacts:
 - path: '*.nupkg'

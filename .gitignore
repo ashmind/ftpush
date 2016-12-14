@@ -6,3 +6,4 @@ packages/
 *.suo
 *.user
 *.lock.json
+*.nupkg

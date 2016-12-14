@@ -95,11 +95,17 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Ftpush.nuspec">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="ILMerge.props" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="ILMergeInternalizeExcludeList.txt" />
+    <None Include="ILMergeInternalizeExcludeList.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ILMergeOrder.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

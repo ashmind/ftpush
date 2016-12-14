@@ -1,0 +1,1 @@
+nuget pack ftpush.csproj -Properties Configuration=Release -Tool

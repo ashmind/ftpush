@@ -1,16 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using FluentFTP;
 
 namespace Ftpush.Internal {
     public class FtpClientLease : IDisposable {
         private readonly Lazy<FtpClient> _lazy;
         private readonly Action<Lazy<FtpClient>> _release;
-        private int _released = 0;
+        private int _released;
 
         public FtpClientLease(Lazy<FtpClient> lazy, Action<Lazy<FtpClient>> release) {
             _lazy = lazy;

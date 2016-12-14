@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Reflection.Emit;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
 using FluentFTP;
@@ -100,10 +99,12 @@ namespace Ftpush {
 
         [Serializable]
         private class ArgumentValidationException : Exception {
+            // ReSharper disable UnusedMember.Local
             public ArgumentValidationException() { }
             public ArgumentValidationException(string message) : base(message) { }
             public ArgumentValidationException(string message, Exception inner) : base(message, inner) { }
             protected ArgumentValidationException(SerializationInfo info, StreamingContext context) : base(info, context) { }
+            // ReSharper restore UnusedMember.Local
         }
     }
 }

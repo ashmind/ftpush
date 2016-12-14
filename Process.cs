@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP;
@@ -19,9 +20,10 @@ namespace Ftpush {
         private readonly FtpClient _mainClient;
         private readonly FtpClientLease _mainClientLease;
         private readonly FtpClientPool _clientPool;
+        private readonly IReadOnlyCollection<Rule> _excludes;
         private string _remoteWorkingDirectory;
 
-        private Process(FtpClientPool clientPool) {
+        private Process(FtpClientPool clientPool, IReadOnlyCollection<string> excludes) {
             _clientPool = clientPool;
             _mainClientLease = clientPool.LeaseClient();
             try {
@@ -31,10 +33,11 @@ namespace Ftpush {
                 _mainClientLease.Dispose();
                 throw;
             }
+            _excludes = excludes.Select(p => new Rule(GlobHelper.ConvertGlobsToRegex(p), p)).ToArray();
         }
 
-        public static void SynchronizeDirectory(FtpClientPool clientPool, DirectoryInfo localDirectory, string ftpPath) {
-            using (var process = new Process(clientPool)) {
+        public static void SynchronizeDirectory(FtpClientPool clientPool, DirectoryInfo localDirectory, string ftpPath, IReadOnlyCollection<string> excludes) {
+            using (var process = new Process(clientPool, excludes)) {
                 process.SynchronizeDirectory(localDirectory, ftpPath);
             }
         }
@@ -51,8 +54,15 @@ namespace Ftpush {
 
             var pushTasks = new List<Task>();
             foreach (var local in localDirectory.EnumerateFileSystemInfos()) {
-                EnsureRemoteWorkingDirectory(ftpPath);
                 var remote = allRemote.GetValueOrDefault(local.Name);
+                var exclude = MatchExcludes(local.FullName);
+                if (exclude != null) {
+                    Log(depth + 1, ItemAction.Skip, local.Name, $"excluded ({exclude.Original})");
+                    allRemoteFound.Add(remote);
+                    continue;
+                }
+
+                EnsureRemoteWorkingDirectory(ftpPath);
                 if (remote == null) {
                     Log(depth + 1, ItemAction.Add, local.Name);
                     pushTasks.Add(PushAnyAsync(local, ftpPath, depth + 1));
@@ -68,16 +78,16 @@ namespace Ftpush {
                         continue;
                     }
 
-                    Log(depth + 1, ItemAction.Replace, localAsDirectory.Name, "remote is a file");
-                    DeleteFtpFile(remote);
+                    DeleteFtpFile(remote, depth + 1);
+                    Log(depth + 1, ItemAction.Add, localAsDirectory.Name);
                     PushDirectory(localAsDirectory, ftpPath, depth + 1);
                     continue;
                 }
 
                 var localAsFile = (FileInfo)local;
                 if (remote.Type == FtpFileSystemObjectType.Directory) {
-                    Log(depth + 1, ItemAction.Replace, localAsFile.Name, "remote is a dir");
                     DeleteFtpDirectory(remote, depth + 1);
+                    Log(depth + 1, ItemAction.Replace, localAsFile.Name);
                     pushTasks.Add(PushFileAsync(localAsFile));
                     continue;
                 }
@@ -100,7 +110,11 @@ namespace Ftpush {
 
             EnsureRemoteWorkingDirectory(ftpPath);
             foreach (var missing in allRemote.Values.Except(allRemoteFound)) {
-                Log(depth + 1, ItemAction.Delete, missing.Name);
+                var exclude = MatchExcludes(missing.FullName);
+                if (exclude != null) {
+                    Log(depth + 1, ItemAction.Skip, missing.Name, $"excluded ({exclude.Original})");
+                    continue;
+                }
                 DeleteFtpAny(missing, depth + 1);
             }
         }
@@ -121,6 +135,12 @@ namespace Ftpush {
 
             var pushTasks = new List<Task>();
             foreach (var local in localDirectory.EnumerateFileSystemInfos()) {
+                var exclude = MatchExcludes(local.FullName);
+                if (exclude != null) {
+                    Log(depth + 1, ItemAction.Skip, local.Name, $"excluded ({exclude.Original})");
+                    continue;
+                }
+
                 EnsureRemoteWorkingDirectory(ftpPath);
                 Log(depth + 1, ItemAction.Add, local.Name);
                 pushTasks.Add(PushAnyAsync(local, ftpParentPath, depth + 1));
@@ -144,27 +164,44 @@ namespace Ftpush {
                 // ReSharper restore AccessToDisposedClosure
             }
         }
-        private void DeleteFtpAny(FtpListItem remote, int depth) {
+        private bool DeleteFtpAny(FtpListItem remote, int depth) {
             if (remote.Type == FtpFileSystemObjectType.Directory) {
-                DeleteFtpDirectory(remote, depth);
+                return DeleteFtpDirectory(remote, depth);
             }
             else {
-                DeleteFtpFile(remote);
+                DeleteFtpFile(remote, depth);
+                return true;
             }
         }
 
-        private void DeleteFtpDirectory(FtpListItem remote, int depth) {
+        private bool DeleteFtpDirectory(FtpListItem remote, int depth) {
+            Log(depth, ItemAction.Delete, remote.Name);
             var parentWorkingDirectory = _remoteWorkingDirectory;
+            var itemsRemain = false;
             foreach (var child in _mainClient.GetListing(remote.Name)) {
+                var exclude = MatchExcludes(child.FullName);
+                if (exclude != null) {
+                    Log(depth + 1, ItemAction.Skip, child.Name, $"excluded ({exclude.Original})");
+                    itemsRemain = true;
+                    continue;
+                }
+
                 EnsureRemoteWorkingDirectory(remote.FullName);
-                Log(depth + 1, ItemAction.Delete, child.Name);
-                DeleteFtpAny(child, depth + 1);
+                if (!DeleteFtpAny(child, depth + 1))
+                    itemsRemain = true;
             }
+            if (itemsRemain) {
+                Log(depth + 1, ItemAction.Skip, $"# dir '{remote.Name}' not deleted (items remain)");
+                return false;
+            }
+
             EnsureRemoteWorkingDirectory(parentWorkingDirectory);
             Retry(() => _mainClient.DeleteDirectory(remote.Name));
+            return true;
         }
 
-        private void DeleteFtpFile(FtpListItem remote) {
+        private void DeleteFtpFile(FtpListItem remote, int depth) {
+            Log(depth, ItemAction.Delete, remote.Name);
             Retry(() => _mainClient.DeleteFile(remote.Name));
         }
 
@@ -174,6 +211,14 @@ namespace Ftpush {
 
             _mainClient.SetWorkingDirectory(path);
             _remoteWorkingDirectory = path;
+        }
+
+        private Rule MatchExcludes(string path) {
+            foreach (var exclude in _excludes) {
+                if (exclude.Regex.IsMatch(path))
+                    return exclude;
+            }
+            return null;
         }
 
         private void Log(int depth, ItemAction state, string itemName, string message = null) {
@@ -202,6 +247,10 @@ namespace Ftpush {
             });
         }
 
+        public void Dispose() {
+            _mainClientLease.Dispose();
+        }
+
         private class ItemAction {
             public static ItemAction Add { get; } = new ItemAction("+ ", ConsoleColor.DarkGreen);
             public static ItemAction Skip { get; } = new ItemAction(null, ConsoleColor.DarkGray);
@@ -217,8 +266,14 @@ namespace Ftpush {
             public ConsoleColor Color { get; }
         }
 
-        public void Dispose() {
-            _mainClientLease.Dispose();
+        private class Rule {
+            public Regex Regex { get; }
+            public string Original { get; }
+
+            public Rule(Regex regex, string original) {
+                Regex = regex;
+                Original = original;
+            }
         }
     }
 }

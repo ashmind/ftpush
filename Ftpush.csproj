@@ -53,6 +53,10 @@
       <HintPath>packages\FluentFTP.16.0.15\lib\net40\FluentFTP.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="JetBrains.Annotations, Version=10.2.1.0, Culture=neutral, PublicKeyToken=1010a0d8d6380325, processorArchitecture=MSIL">
+      <HintPath>packages\JetBrains.Annotations.10.2.1\lib\net\JetBrains.Annotations.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="MSBuild.AutoILMerge.Task, Version=1.0.0.0, Culture=en-US, processorArchitecture=MSIL">
       <HintPath>packages\MSBuild.AutoILMerge.Task.1.1.0\lib\net40\MSBuild.AutoILMerge.Task.dll</HintPath>
       <Private>True</Private>
@@ -84,6 +88,7 @@
     <Compile Include="Internal\FtpClientExtensions.cs" />
     <Compile Include="Internal\FtpClientLease.cs" />
     <Compile Include="Internal\FtpClientPool.cs" />
+    <Compile Include="Internal\GlobHelper.cs" />
     <Compile Include="Process.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -92,6 +97,9 @@
     <None Include="App.config" />
     <None Include="ILMerge.props" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="ILMergeInternalizeExcludeList.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

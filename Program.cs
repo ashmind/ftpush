@@ -61,7 +61,7 @@ namespace Ftpush {
             var credentials = new NetworkCredential(args.FtpUserName, password);
 
             using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 5)) {
-                Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath);
+                Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath, args.Excludes);
             }
 
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);

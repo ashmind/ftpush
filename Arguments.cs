@@ -1,4 +1,5 @@
-﻿using CommandLine;
+﻿using System.Collections.Generic;
+using CommandLine;
 using JetBrains.Annotations;
 
 namespace Ftpush {
@@ -21,7 +22,7 @@ namespace Ftpush {
 
         [UsedImplicitly(ImplicitUseKindFlags.Assign)]
         [OptionArray('x', "exclude", HelpText = "Excluded patterns: those will not be copied from source or deleted from target.")]
-        public string[] Excludes { get; set; }
+        public string[] Excludes { get; set; } = new string[0];
 
         [UsedImplicitly(ImplicitUseKindFlags.Assign)]
         [Option('v', "verbose", HelpText = "Whether to print tracing information.", DefaultValue = false)]

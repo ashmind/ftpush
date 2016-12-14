@@ -2,8 +2,10 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
+using AshMind.Extensions;
 using FluentFTP;
 using Ftpush.Internal;
 
@@ -11,16 +13,23 @@ namespace Ftpush {
     public static class Program {
         public static int Main(string[] args) {
             try {
+
                 var arguments = new Arguments();
                 if (!CommandLine.Parser.Default.ParseArgumentsStrict(args, arguments))
                     return -1;
+
+                var assembly = Assembly.GetEntryAssembly();
+                Console.WriteLine("{0} {1}",
+                    assembly.GetName().Name,
+                    assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion
+                );
 
                 Main(arguments);
                 return 0;
             }
             catch (ArgumentValidationException ex) {
                 FluentConsole.Red.Text(ex.Message);
-                return 3;
+                return -1;
             }
             catch (Exception ex) {
                 var ftpException = GetFtpCommandException(ex);
@@ -51,16 +60,16 @@ namespace Ftpush {
             var ftpUrl = new Uri(args.FtpUrl);
             var password = Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
             if (string.IsNullOrEmpty(password))
-                throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine var might exist, but is not looked at).");
+                throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine vars are ignored).");
 
-            FluentConsole.White.Line("Connecting to {0}.", ftpUrl);
+            FluentConsole.White.Line(ftpUrl);
             var started = DateTime.Now;
 
             var basePath = ftpUrl.LocalPath;
             var credentials = new NetworkCredential(args.FtpUserName, password);
 
-            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 5)) {
-                Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath, args.Excludes);
+            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 6)) {
+                Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath, args.Excludes.AsReadOnlyList());
             }
 
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);

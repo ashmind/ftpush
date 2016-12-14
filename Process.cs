@@ -25,15 +25,15 @@ namespace Ftpush {
 
         private Process(FtpClientPool clientPool, IReadOnlyCollection<string> excludes) {
             _clientPool = clientPool;
-            _mainClientLease = clientPool.LeaseClient();
             try {
+                _mainClientLease = clientPool.LeaseClient();
                 _mainClient = _mainClientLease.Client;
+                _excludes = excludes.Select(p => new Rule(GlobHelper.ConvertGlobsToRegex(p), p)).ToArray();
             }
             catch (Exception) {
-                _mainClientLease.Dispose();
+                _mainClientLease?.Dispose();
                 throw;
             }
-            _excludes = excludes.Select(p => new Rule(GlobHelper.ConvertGlobsToRegex(p), p)).ToArray();
         }
 
         public static void SynchronizeDirectory(FtpClientPool clientPool, DirectoryInfo localDirectory, string ftpPath, IReadOnlyCollection<string> excludes) {
@@ -143,7 +143,7 @@ namespace Ftpush {
 
                 EnsureRemoteWorkingDirectory(ftpPath);
                 Log(depth + 1, ItemAction.Add, local.Name);
-                pushTasks.Add(PushAnyAsync(local, ftpParentPath, depth + 1));
+                pushTasks.Add(PushAnyAsync(local, ftpPath, depth + 1));
             }
             Task.WaitAll(pushTasks.ToArray());
         }
@@ -153,7 +153,7 @@ namespace Ftpush {
             using (var pushLease = _clientPool.LeaseClient()) {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
-                    pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory);
+                    Retry(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
 
                     using (var readStream = localFile.OpenRead())
                     using (var writeStream = Retry(() => pushLease.Client.OpenWrite(localFile.Name))) {
@@ -209,7 +209,7 @@ namespace Ftpush {
             if (_remoteWorkingDirectory == path)
                 return;
 
-            _mainClient.SetWorkingDirectory(path);
+            Retry(() => _mainClient.SetWorkingDirectory(path));
             _remoteWorkingDirectory = path;
         }
 
@@ -226,25 +226,31 @@ namespace Ftpush {
             FluentConsole.Color(state.Color).Line(line);
         }
 
-        private T Retry<T>(Func<T> func) {
-            var maxRetryCount = 5;
-            var retry = 1;
-            while (true) {
-                try {
-                    return func();
-                }
-                catch (FtpCommandException ex) when (CanRetryReturnCode.Contains(ex.CompletionCode) && retry < maxRetryCount) {
-                    Thread.Sleep(1000);
-                }
-                retry += 1;
-            }
-        }
-
         private void Retry(Action action) {
             Retry<object>(() => {
                 action();
                 return null;
             });
+        }
+
+        private T Retry<T>(Func<T> func) {
+            var maxRetryCount = 10;
+            var retryCount = 1;
+            while (true) {
+                try {
+                    return func();
+                }
+                catch (Exception ex) when (CanRetry(ex) && retryCount < maxRetryCount) {
+                    Thread.Sleep(1000);
+                }
+                retryCount += 1;
+            }
+        }
+
+        private bool CanRetry(Exception exception) {
+            var ftpException = exception as FtpCommandException;
+            return ftpException != null && CanRetryReturnCode.Contains(ftpException.CompletionCode)
+                || (exception is TimeoutException);
         }
 
         public void Dispose() {

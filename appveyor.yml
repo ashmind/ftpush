@@ -1,10 +1,13 @@
 before_build:
 - nuget restore
 
-build:  
+build:
+  project: Ftpush.sln
   verbosity: minimal
+
 after_build:
 - ps: nuget-pack
+
 artifacts:
 - path: '*.nupkg'
 

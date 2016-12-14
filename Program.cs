@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
 using AshMind.Extensions;
+using CommandLine.Text;
 using FluentFTP;
 using Ftpush.Internal;
 
@@ -18,11 +19,9 @@ namespace Ftpush {
                 if (!CommandLine.Parser.Default.ParseArgumentsStrict(args, arguments))
                     return -1;
 
-                var assembly = Assembly.GetEntryAssembly();
-                Console.WriteLine("{0} {1}",
-                    assembly.GetName().Name,
-                    assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion
-                );
+                Console.WriteLine(HeadingInfo.Default);
+                Console.WriteLine(CopyrightInfo.Default);
+                Console.WriteLine();
 
                 Main(arguments);
                 return 0;

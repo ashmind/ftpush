@@ -2,6 +2,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection.Emit;
+using System.Runtime.Serialization;
+using System.Security.Authentication;
 using FluentFTP;
 using Ftpush.Internal;
 
@@ -15,6 +18,10 @@ namespace Ftpush {
 
                 Main(arguments);
                 return 0;
+            }
+            catch (ArgumentValidationException ex) {
+                FluentConsole.Red.Text(ex.Message);
+                return 3;
             }
             catch (Exception ex) {
                 var ftpException = GetFtpCommandException(ex);
@@ -45,7 +52,7 @@ namespace Ftpush {
             var ftpUrl = new Uri(args.FtpUrl);
             var password = Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
             if (string.IsNullOrEmpty(password))
-                throw new Exception($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine var might exist, but is not looked at).");
+                throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine var might exist, but is not looked at).");
 
             FluentConsole.White.Line("Connecting to {0}.", ftpUrl);
             var started = DateTime.Now;
@@ -53,20 +60,34 @@ namespace Ftpush {
             var basePath = ftpUrl.LocalPath;
             var credentials = new NetworkCredential(args.FtpUserName, password);
 
-            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl.Host, credentials), 5)) {
+            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 5)) {
                 Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath);
             }
 
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);
         }
 
-        private static FtpClient CreateFtpClient(string host, NetworkCredential credentials) {
+        private static FtpClient CreateFtpClient(Uri url, NetworkCredential credentials) {
+            var encryptionMode = FtpEncryptionMode.None;
+            if (url.Scheme.Equals("ftps", StringComparison.OrdinalIgnoreCase)) {
+                encryptionMode = FtpEncryptionMode.Explicit;
+            }
+            else if (!url.Scheme.Equals("ftp", StringComparison.OrdinalIgnoreCase)) {
+                throw new ArgumentValidationException($"URL scheme '{url.Scheme}' is not supported.");
+            }
+
+            if (encryptionMode == FtpEncryptionMode.Explicit)
+                throw new NotSupportedException("FTPS hangs at the moment, needs more research.");
+
             FtpClient client = null;
             try {
                 client = new FtpClient{
                     DataConnectionType = FtpDataConnectionType.AutoActive,
-                    Host = host,
-                    Credentials = credentials
+                    Host = url.Host,
+                    Port = !url.IsDefaultPort ? url.Port : 0,
+                    EncryptionMode = encryptionMode,
+                    Credentials = credentials,
+                    SslProtocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12
                 };
                 client.Connect();
                 return client;
@@ -75,6 +96,14 @@ namespace Ftpush {
                 client?.Dispose();
                 throw;
             }
+        }
+
+        [Serializable]
+        private class ArgumentValidationException : Exception {
+            public ArgumentValidationException() { }
+            public ArgumentValidationException(string message) : base(message) { }
+            public ArgumentValidationException(string message, Exception inner) : base(message, inner) { }
+            protected ArgumentValidationException(SerializationInfo info, StreamingContext context) : base(info, context) { }
         }
     }
 }

@@ -19,22 +19,14 @@ namespace Ftpush {
         };
 
         private readonly FtpClient _mainClient;
-        private readonly FtpClientLease _mainClientLease;
-        private readonly FtpClientPool _clientPool;
+        private readonly FtpClientPool _backgroundPool;
         private readonly IReadOnlyCollection<Rule> _excludes;
         private string _remoteWorkingDirectory;
 
-        public Process(FtpClientPool clientPool, IReadOnlyCollection<string> excludes) {
-            _clientPool = clientPool;
-            try {
-                _mainClientLease = clientPool.LeaseClient();
-                _mainClient = _mainClientLease.Client;
-                _excludes = excludes.Select(p => new Rule(GlobHelper.ConvertGlobsToRegex(p), p)).ToArray();
-            }
-            catch (Exception) {
-                _mainClientLease?.Dispose();
-                throw;
-            }
+        public Process(FtpClient mainClient, FtpClientPool backgroundPool, IReadOnlyCollection<string> excludes) {
+            _mainClient = mainClient;
+            _backgroundPool = backgroundPool;
+            _excludes = excludes.Select(p => new Rule(GlobHelper.ConvertGlobsToRegex(p), p)).ToArray();
         }
 
         public void SynchronizeTopLevel(FileSystemInfo local, string ftpPath) {
@@ -194,7 +186,7 @@ namespace Ftpush {
 
         private async Task PushFileAsync(FileInfo localFile) {
             var remoteWorkingDirectory = _remoteWorkingDirectory;
-            using (var pushLease = _clientPool.LeaseClient()) {
+            using (var pushLease = _backgroundPool.LeaseClient()) {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
                     Retry(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
@@ -282,7 +274,7 @@ namespace Ftpush {
             Retry<object>(() => {
                 action();
                 return null;
-            });
+            }, retryCount);
         }
 
         private T Retry<T>(Func<T> func, int? retryCount = null) {
@@ -306,7 +298,7 @@ namespace Ftpush {
         }
 
         public void Dispose() {
-            _mainClientLease.Dispose();
+            _mainClient.Dispose();
         }
 
         private class ItemAction {

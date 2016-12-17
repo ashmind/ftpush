@@ -54,6 +54,12 @@ namespace Ftpush {
         }
 
         private static void Main(Arguments args) {
+            if (args.BackgroundConnectionCount < 0)
+                throw new ArgumentValidationException("Parallel count cannot be negative.");
+
+            if (args.BackgroundConnectionCount < 1)
+                throw new NotSupportedException("Current implementaton requires at least one background connection (this might be improved in the future).");
+
             if (args.Verbose)
                 FtpTrace.AddListener(new ConsoleTraceListener());
 
@@ -69,8 +75,9 @@ namespace Ftpush {
             var credentials = new NetworkCredential(args.FtpUserName, password);
             var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
-            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 6))
-            using (var process = new Process(pool, args.Excludes.AsReadOnlyList())) {
+            using (var mainClient = CreateFtpClient(ftpUrl, credentials))
+            using (var backgroundPool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), args.BackgroundConnectionCount))
+            using (var process = new Process(mainClient, backgroundPool, args.Excludes.AsReadOnlyList())) {
                 process.SynchronizeTopLevel(sourceInfo, basePath);
             }
 

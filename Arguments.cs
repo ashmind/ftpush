@@ -25,6 +25,10 @@ namespace Ftpush {
         public string[] Excludes { get; set; } = new string[0];
 
         [UsedImplicitly(ImplicitUseKindFlags.Assign)]
+        [Option("parallel", HelpText = "Maximum number of background connections.", DefaultValue = 5)]
+        public int BackgroundConnectionCount { get; set; } = 5;
+
+        [UsedImplicitly(ImplicitUseKindFlags.Assign)]
         [Option('v', "verbose", HelpText = "Whether to print tracing information.", DefaultValue = false)]
         public bool Verbose { get; set; }
     }

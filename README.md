@@ -5,6 +5,11 @@ At the moment it is tested with Azure FTP, but not much else.
 
 You can get it from NuGet (https://www.nuget.org/packages/ftpush).
 
+#### Example usage
+
+SET FTP_PASS=mypassword
+ftpush -source D:\build\site -target ftp://example.com/wwwroot -username uploader -passvar FTP_PASS
+
 #### Features
 
 * Directory synchronization

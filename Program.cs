@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -66,9 +67,11 @@ namespace Ftpush {
 
             var basePath = ftpUrl.LocalPath;
             var credentials = new NetworkCredential(args.FtpUserName, password);
+            var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
-            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 6)) {
-                Process.SynchronizeDirectory(pool, new DirectoryInfo(args.SourcePath), basePath, args.Excludes.AsReadOnlyList());
+            using (var pool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), 6))
+            using (var process = new Process(pool, args.Excludes.AsReadOnlyList())) {
+                process.SynchronizeTopLevel(sourceInfo, basePath);
             }
 
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);

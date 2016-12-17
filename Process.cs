@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using FluentFTP;
 using AshMind.Extensions;
 using Ftpush.Internal;
+using JetBrains.Annotations;
 
 namespace Ftpush {
     public class Process : IDisposable {
@@ -23,7 +24,7 @@ namespace Ftpush {
         private readonly IReadOnlyCollection<Rule> _excludes;
         private string _remoteWorkingDirectory;
 
-        private Process(FtpClientPool clientPool, IReadOnlyCollection<string> excludes) {
+        public Process(FtpClientPool clientPool, IReadOnlyCollection<string> excludes) {
             _clientPool = clientPool;
             try {
                 _mainClientLease = clientPool.LeaseClient();
@@ -36,18 +37,45 @@ namespace Ftpush {
             }
         }
 
-        public static void SynchronizeDirectory(FtpClientPool clientPool, DirectoryInfo localDirectory, string ftpPath, IReadOnlyCollection<string> excludes) {
-            using (var process = new Process(clientPool, excludes)) {
-                process.SynchronizeDirectory(localDirectory, ftpPath);
+        public void SynchronizeTopLevel(FileSystemInfo local, string ftpPath) {
+            var remoteIsDirectory = false;
+            try {
+                EnsureRemoteWorkingDirectory(ftpPath, retryCount: 0);
+                remoteIsDirectory = true;
             }
-        }
+            catch (FtpCommandException ex) when (ex.CompletionCode == "550") {
+            }
 
-        private void SynchronizeDirectory(DirectoryInfo localDirectory, string ftpPath) {
-            Log(0, ItemAction.Synchronize, localDirectory.Name);
-            SynchronizeDirectory(localDirectory, ftpPath, 0);
+            var localAsDirectory = local as DirectoryInfo;
+            if (!remoteIsDirectory) {
+                if (localAsDirectory == null) {
+                    Log(0, ItemAction.Replace, local.Name);
+                    PushFile((FileInfo) local, ftpPath, _mainClient);
+                    return;
+                }
+
+                if (!_mainClient.HasFeature(FtpCapability.MLSD))
+                    throw new NotSupportedException($"FTP server does not support MLST and no other way to know whether file {ftpPath} exists was implemented.");
+
+                if (_mainClient.GetObjectInfo(ftpPath) != null)
+                    DeleteFtpFile(ftpPath, 0);
+                Log(0, ItemAction.Add, localAsDirectory.Name);
+                Retry(() => _mainClient.CreateDirectory(localAsDirectory.Name));
+                PushDirectoryContents(localAsDirectory, ftpPath, 0);
+                return;
+            }
+
+            if (localAsDirectory == null) {
+                var remoteChild = _mainClient.GetListing().FirstOrDefault(l => l.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase));
+                SynchronizeFileAsync((FileInfo) local, remoteChild, 0)?.GetAwaiter().GetResult();
+            }
+
+            SynchronizeDirectory(localAsDirectory, ftpPath, 0);
         }
 
         private void SynchronizeDirectory(DirectoryInfo localDirectory, string ftpPath, int depth) {
+            Log(depth, ItemAction.Synchronize, localDirectory.Name);
+
             EnsureRemoteWorkingDirectory(ftpPath);
             var allRemote = _mainClient.GetListing().ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
             var allRemoteFound = new HashSet<FtpListItem>();
@@ -63,17 +91,19 @@ namespace Ftpush {
                 }
 
                 EnsureRemoteWorkingDirectory(ftpPath);
-                if (remote == null) {
-                    Log(depth + 1, ItemAction.Add, local.Name);
-                    pushTasks.Add(PushAnyAsync(local, ftpPath, depth + 1));
-                    continue;
-                }
 
-                allRemoteFound.Add(remote);
+                if (remote != null)
+                    allRemoteFound.Add(remote);
+
                 var localAsDirectory = local as DirectoryInfo;
                 if (localAsDirectory != null) {
+                    if (remote == null) {
+                        Log(depth + 1, ItemAction.Add, local.Name);
+                        PushDirectory(localAsDirectory, ftpPath, depth + 1);
+                        continue;
+                    }
+
                     if (remote.Type == FtpFileSystemObjectType.Directory) {
-                        Log(depth + 1, ItemAction.Synchronize, localAsDirectory.Name);
                         SynchronizeDirectory(localAsDirectory, remote.FullName, depth + 1);
                         continue;
                     }
@@ -85,28 +115,12 @@ namespace Ftpush {
                 }
 
                 var localAsFile = (FileInfo)local;
-                if (remote.Type == FtpFileSystemObjectType.Directory) {
-                    DeleteFtpDirectory(remote, depth + 1);
-                    Log(depth + 1, ItemAction.Replace, localAsFile.Name);
-                    pushTasks.Add(PushFileAsync(localAsFile));
-                    continue;
-                }
-
-                if (remote.Type == FtpFileSystemObjectType.Link) {
-                    Log(depth+1, ItemAction.Replace, localAsFile.Name, "remote is a link");
-                    pushTasks.Add(PushFileAsync(localAsFile));
-                    continue;
-                }
-
-                if (remote.Modified.ToLocalTime().TruncateToMinutes() != localAsFile.LastWriteTime.TruncateToMinutes()) {
-                    Log(depth+1, ItemAction.Replace, localAsFile.Name);
-                    pushTasks.Add(PushFileAsync(localAsFile));
-                    continue;
-                }
-
-                Log(depth + 1, ItemAction.Skip, local.Name);
+                var pushTask = SynchronizeFileAsync(localAsFile, remote, depth);
+                if (pushTask != null)
+                    pushTasks.Add(pushTask);
             }
-            Task.WaitAll(pushTasks.ToArray());
+            if (pushTasks.Count > 0)
+                Task.WaitAll(pushTasks.ToArray());
 
             EnsureRemoteWorkingDirectory(ftpPath);
             foreach (var missing in allRemote.Values.Except(allRemoteFound)) {
@@ -117,6 +131,33 @@ namespace Ftpush {
                 }
                 DeleteFtpAny(missing, depth + 1);
             }
+        }
+
+        [CanBeNull]
+        private Task SynchronizeFileAsync(FileInfo localFile, FtpListItem remote, int depth) {
+            if (remote == null) {
+                Log(depth + 1, ItemAction.Add, localFile.Name);
+                return PushFileAsync(localFile);
+            }
+
+            if (remote.Type == FtpFileSystemObjectType.Directory) {
+                DeleteFtpDirectory(remote, depth + 1);
+                Log(depth + 1, ItemAction.Replace, localFile.Name);
+                return PushFileAsync(localFile);
+            }
+
+            if (remote.Type == FtpFileSystemObjectType.Link) {
+                Log(depth + 1, ItemAction.Replace, localFile.Name, "remote is a link");
+                return PushFileAsync(localFile);
+            }
+
+            if (remote.Modified.ToLocalTime().TruncateToMinutes() != localFile.LastWriteTime.TruncateToMinutes()) {
+                Log(depth + 1, ItemAction.Replace, localFile.Name);
+                return PushFileAsync(localFile);
+            }
+
+            Log(depth + 1, ItemAction.Skip, localFile.Name);
+            return null; // I know it's bad style, but it optimizes the collection/wait for a common case when everything is up to date
         }
 
         private Task PushAnyAsync(FileSystemInfo local, string ftpParentPath, int depth) {
@@ -131,8 +172,11 @@ namespace Ftpush {
 
         private void PushDirectory(DirectoryInfo localDirectory, string ftpParentPath, int depth) {
             var ftpPath = $"{ftpParentPath}/{localDirectory.Name}";
-            _mainClient.CreateDirectory(localDirectory.Name);
+            Retry(() => _mainClient.CreateDirectory(localDirectory.Name));
+            PushDirectoryContents(localDirectory, ftpPath, depth);
+        }
 
+        private void PushDirectoryContents(DirectoryInfo localDirectory, string ftpPath, int depth) {
             var pushTasks = new List<Task>();
             foreach (var local in localDirectory.EnumerateFileSystemInfos()) {
                 var exclude = MatchExcludes(local.FullName);
@@ -154,16 +198,20 @@ namespace Ftpush {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
                     Retry(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
-
-                    using (var readStream = localFile.OpenRead())
-                    using (var writeStream = Retry(() => pushLease.Client.OpenWrite(localFile.Name))) {
-                        readStream.CopyTo(writeStream, 256*1024);
-                    }
-                    Retry(() => pushLease.Client.SetModifiedTime(localFile.Name, localFile.LastWriteTimeUtc));
+                    PushFile(localFile, localFile.Name, pushLease.Client);
                 }).ConfigureAwait(false);
                 // ReSharper restore AccessToDisposedClosure
             }
         }
+
+        private void PushFile(FileInfo localFile, string ftpPath, FtpClient client) {
+            using (var readStream = localFile.OpenRead())
+            using (var writeStream = Retry(() => client.OpenWrite(ftpPath))) {
+                readStream.CopyTo(writeStream, 256*1024);
+            }
+            Retry(() => client.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
+        }
+
         private bool DeleteFtpAny(FtpListItem remote, int depth) {
             if (remote.Type == FtpFileSystemObjectType.Directory) {
                 return DeleteFtpDirectory(remote, depth);
@@ -201,15 +249,19 @@ namespace Ftpush {
         }
 
         private void DeleteFtpFile(FtpListItem remote, int depth) {
-            Log(depth, ItemAction.Delete, remote.Name);
-            Retry(() => _mainClient.DeleteFile(remote.Name));
+            DeleteFtpFile(remote.Name, depth);
         }
 
-        private void EnsureRemoteWorkingDirectory(string path) {
+        private void DeleteFtpFile(string ftpPath, int depth) {
+            Log(depth, ItemAction.Delete, ftpPath);
+            Retry(() => _mainClient.DeleteFile(ftpPath));
+        }
+
+        private void EnsureRemoteWorkingDirectory(string path, int? retryCount = null) {
             if (_remoteWorkingDirectory == path)
                 return;
 
-            Retry(() => _mainClient.SetWorkingDirectory(path));
+            Retry(() => _mainClient.SetWorkingDirectory(path), retryCount);
             _remoteWorkingDirectory = path;
         }
 
@@ -226,24 +278,24 @@ namespace Ftpush {
             FluentConsole.Color(state.Color).Line(line);
         }
 
-        private void Retry(Action action) {
+        private void Retry(Action action, int? retryCount = null) {
             Retry<object>(() => {
                 action();
                 return null;
             });
         }
 
-        private T Retry<T>(Func<T> func) {
-            var maxRetryCount = 10;
-            var retryCount = 1;
+        private T Retry<T>(Func<T> func, int? retryCount = null) {
+            retryCount = retryCount ?? 10;
+            var currentRetryCount = 0;
             while (true) {
                 try {
                     return func();
                 }
-                catch (Exception ex) when (CanRetry(ex) && retryCount < maxRetryCount) {
+                catch (Exception ex) when (CanRetry(ex) && currentRetryCount < retryCount) {
                     Thread.Sleep(1000);
                 }
-                retryCount += 1;
+                currentRetryCount += 1;
             }
         }
 

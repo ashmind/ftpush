@@ -36,7 +36,7 @@ namespace Ftpush {
                 if (ftpException != null)
                     FluentConsole.Red.Line($"{ftpException.CompletionCode} {ftpException.Message}");
 
-                FluentConsole.Red.Text(ex);
+                FluentConsole.Red.Line(ex);
                 return ex.HResult;
             }
         }
@@ -75,8 +75,8 @@ namespace Ftpush {
             var credentials = new NetworkCredential(args.FtpUserName, password);
             var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
-            using (var mainClient = CreateFtpClient(ftpUrl, credentials))
-            using (var backgroundPool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials), args.BackgroundConnectionCount))
+            using (var mainClient = CreateFtpClient(ftpUrl, credentials, args.FtpUseActive))
+            using (var backgroundPool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive), args.BackgroundConnectionCount))
             using (var process = new Process(mainClient, backgroundPool, args.Excludes.AsReadOnlyList())) {
                 process.SynchronizeTopLevel(sourceInfo, basePath);
             }
@@ -84,7 +84,7 @@ namespace Ftpush {
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);
         }
 
-        private static FtpClient CreateFtpClient(Uri url, NetworkCredential credentials) {
+        private static FtpClient CreateFtpClient(Uri url, NetworkCredential credentials, bool active) {
             var encryptionMode = FtpEncryptionMode.None;
             if (url.Scheme.Equals("ftps", StringComparison.OrdinalIgnoreCase)) {
                 encryptionMode = FtpEncryptionMode.Explicit;
@@ -93,13 +93,10 @@ namespace Ftpush {
                 throw new ArgumentValidationException($"URL scheme '{url.Scheme}' is not supported.");
             }
 
-            if (encryptionMode == FtpEncryptionMode.Explicit)
-                throw new NotSupportedException("FTPS hangs at the moment, needs more research.");
-
             FtpClient client = null;
             try {
-                client = new FtpClient{
-                    DataConnectionType = FtpDataConnectionType.AutoActive,
+                client = new FtpClient {
+                    DataConnectionType = active ? FtpDataConnectionType.AutoActive : FtpDataConnectionType.AutoPassive,
                     Host = url.Host,
                     Port = !url.IsDefaultPort ? url.Port : 0,
                     EncryptionMode = encryptionMode,

@@ -16,10 +16,10 @@ ftpush -source D:\build\site -target ftp://example.com/wwwroot -username uploade
 * Timestamp-based file comparison and skipping
 * Parallel file uploads (connection per file, up to a limit)
 * Exclusion patterns
+* FTPS (very simple)
 
 #### Limitations
 
-* No FTPS: this is definitely a goal, but not there yet
 * Timestamps are fine-tuned for Azure (uses MDTM to modify) and might not work elsewhere
-* Minimal configuration, e.g. fixed number of parallel uploads, always deletes unmatched, etc
+* Minimal configuration, e.g. always deletes unmatched, etc
 * Does not run on .NET Core

@@ -21,6 +21,10 @@ namespace Ftpush {
         public string SourcePath { get; set; }
 
         [UsedImplicitly(ImplicitUseKindFlags.Assign)]
+        [Option("active", HelpText = "Use Active mode for FTP.", DefaultValue = false)]
+        public bool FtpUseActive { get; set; } = false;
+
+        [UsedImplicitly(ImplicitUseKindFlags.Assign)]
         [OptionArray('x', "exclude", HelpText = "Excluded patterns: those will not be copied from source or deleted from target.")]
         public string[] Excludes { get; set; } = new string[0];
 

@@ -34,7 +34,7 @@ using Ftpush.Properties;
 
 namespace Ftpush.Properties {
     internal static class AssemblyVersion {
-        public const string VersionString = "0.6";
+        public const string VersionString = "0.7";
         public const string VersionSuffix = "-pre";
     }
 }

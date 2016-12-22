@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP;
 using AshMind.Extensions;
@@ -13,10 +12,6 @@ using JetBrains.Annotations;
 namespace Ftpush {
     public class Process : IDisposable {
         private static readonly Task Done = Task.FromResult((object)null);
-        private static readonly HashSet<string> CanRetryReturnCode = new HashSet<string>{
-            "530", // Not logged in -- should be fine since we check initial credentials before any retries
-            "550"  // File not available, sometimes happens due to file lock
-        };
 
         private readonly FtpClient _mainClient;
         private readonly FtpClientPool _backgroundPool;
@@ -52,7 +47,7 @@ namespace Ftpush {
                 if (_mainClient.GetObjectInfo(ftpPath) != null)
                     DeleteFtpFile(ftpPath, 0);
                 Log(0, ItemAction.Add, localAsDirectory.Name);
-                Retry(() => _mainClient.CreateDirectory(localAsDirectory.Name));
+                FtpRetry.Call(() => _mainClient.CreateDirectory(localAsDirectory.Name));
                 PushDirectoryContents(localAsDirectory, ftpPath, 0);
                 return;
             }
@@ -164,7 +159,7 @@ namespace Ftpush {
 
         private void PushDirectory(DirectoryInfo localDirectory, string ftpParentPath, int depth) {
             var ftpPath = $"{ftpParentPath}/{localDirectory.Name}";
-            Retry(() => _mainClient.CreateDirectory(localDirectory.Name));
+            FtpRetry.Call(() => _mainClient.CreateDirectory(localDirectory.Name));
             PushDirectoryContents(localDirectory, ftpPath, depth);
         }
 
@@ -189,7 +184,7 @@ namespace Ftpush {
             using (var pushLease = _backgroundPool.LeaseClient()) {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
-                    Retry(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
+                    FtpRetry.Call(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
                     PushFile(localFile, localFile.Name, pushLease.Client);
                 }).ConfigureAwait(false);
                 // ReSharper restore AccessToDisposedClosure
@@ -198,10 +193,10 @@ namespace Ftpush {
 
         private void PushFile(FileInfo localFile, string ftpPath, FtpClient client) {
             using (var readStream = localFile.OpenRead())
-            using (var writeStream = Retry(() => client.OpenWrite(ftpPath))) {
+            using (var writeStream = FtpRetry.Call(() => client.OpenWrite(ftpPath))) {
                 readStream.CopyTo(writeStream, 256*1024);
             }
-            Retry(() => client.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
+            FtpRetry.Call(() => client.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
         }
 
         private bool DeleteFtpAny(FtpListItem remote, int depth) {
@@ -236,7 +231,7 @@ namespace Ftpush {
             }
 
             EnsureRemoteWorkingDirectory(parentWorkingDirectory);
-            Retry(() => _mainClient.DeleteDirectory(remote.Name));
+            FtpRetry.Call(() => _mainClient.DeleteDirectory(remote.Name));
             return true;
         }
 
@@ -246,14 +241,14 @@ namespace Ftpush {
 
         private void DeleteFtpFile(string ftpPath, int depth) {
             Log(depth, ItemAction.Delete, ftpPath);
-            Retry(() => _mainClient.DeleteFile(ftpPath));
+            FtpRetry.Call(() => _mainClient.DeleteFile(ftpPath));
         }
 
         private void EnsureRemoteWorkingDirectory(string path, int? retryCount = null) {
             if (_remoteWorkingDirectory == path)
                 return;
 
-            Retry(() => _mainClient.SetWorkingDirectory(path), retryCount);
+            FtpRetry.Call(() => _mainClient.SetWorkingDirectory(path), retryCount);
             _remoteWorkingDirectory = path;
         }
 
@@ -268,33 +263,6 @@ namespace Ftpush {
         private void Log(int depth, ItemAction state, string itemName, string message = null) {
             var line = $"{new string(' ', depth*2)}{state.DisplayPrefix}{itemName}{(message != null ? ": " + message : "")}";
             FluentConsole.Color(state.Color).Line(line);
-        }
-
-        private void Retry(Action action, int? retryCount = null) {
-            Retry<object>(() => {
-                action();
-                return null;
-            }, retryCount);
-        }
-
-        private T Retry<T>(Func<T> func, int? retryCount = null) {
-            retryCount = retryCount ?? 10;
-            var currentRetryCount = 0;
-            while (true) {
-                try {
-                    return func();
-                }
-                catch (Exception ex) when (CanRetry(ex) && currentRetryCount < retryCount) {
-                    Thread.Sleep(1000);
-                }
-                currentRetryCount += 1;
-            }
-        }
-
-        private bool CanRetry(Exception exception) {
-            var ftpException = exception as FtpCommandException;
-            return ftpException != null && CanRetryReturnCode.Contains(ftpException.CompletionCode)
-                || (exception is TimeoutException);
         }
 
         public void Dispose() {

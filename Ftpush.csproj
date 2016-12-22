@@ -76,6 +76,7 @@
     <Compile Include="Internal\FtpClientExtensions.cs" />
     <Compile Include="Internal\FtpClientLease.cs" />
     <Compile Include="Internal\FtpClientPool.cs" />
+    <Compile Include="Internal\FtpRetry.cs" />
     <Compile Include="Internal\GlobHelper.cs" />
     <Compile Include="Process.cs" />
     <Compile Include="Program.cs" />

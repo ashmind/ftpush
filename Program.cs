@@ -76,7 +76,7 @@ namespace Ftpush {
             var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
             using (var mainClient = CreateFtpClient(ftpUrl, credentials, args.FtpUseActive))
-            using (var backgroundPool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive), args.BackgroundConnectionCount))
+            using (var backgroundPool = new FtpClientPool(() => FtpRetry.Call(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive)), args.BackgroundConnectionCount))
             using (var process = new Process(mainClient, backgroundPool, args.Excludes.AsReadOnlyList())) {
                 process.SynchronizeTopLevel(sourceInfo, basePath);
             }

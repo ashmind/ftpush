@@ -7,8 +7,10 @@ You can get it from NuGet (https://www.nuget.org/packages/ftpush).
 
 #### Example usage
 
+```batch
 SET FTP_PASS=mypassword
 ftpush -source D:\build\site -target ftp://example.com/wwwroot -username uploader -passvar FTP_PASS
+```
 
 #### Features
 

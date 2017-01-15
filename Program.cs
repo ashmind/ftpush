@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Reflection;
 using System.Runtime.Serialization;
 using System.Security.Authentication;
 using AshMind.Extensions;
@@ -15,7 +13,6 @@ namespace Ftpush {
     public static class Program {
         public static int Main(string[] args) {
             try {
-
                 var arguments = new Arguments();
                 if (!CommandLine.Parser.Default.ParseArgumentsStrict(args, arguments))
                     return -1;

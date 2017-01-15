@@ -53,7 +53,7 @@ namespace Ftpush {
             }
 
             if (localAsDirectory == null) {
-                var remoteChild = _mainClient.GetListing().FirstOrDefault(l => l.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase));
+                var remoteChild = _mainClient.GetListing(".", FtpListOption.AllFiles).FirstOrDefault(l => l.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase));
                 SynchronizeFileAsync((FileInfo) local, remoteChild, 0)?.GetAwaiter().GetResult();
             }
 
@@ -64,7 +64,7 @@ namespace Ftpush {
             Log(depth, ItemAction.Synchronize, localDirectory.Name);
 
             EnsureRemoteWorkingDirectory(ftpPath);
-            var allRemote = _mainClient.GetListing().ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
+            var allRemote = _mainClient.GetListing(".", FtpListOption.AllFiles).ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
             var allRemoteFound = new HashSet<FtpListItem>();
 
             var pushTasks = new List<Task>();
@@ -213,7 +213,7 @@ namespace Ftpush {
             Log(depth, ItemAction.Delete, remote.Name);
             var parentWorkingDirectory = _remoteWorkingDirectory;
             var itemsRemain = false;
-            foreach (var child in _mainClient.GetListing(remote.Name)) {
+            foreach (var child in _mainClient.GetListing(remote.Name, FtpListOption.AllFiles)) {
                 var exclude = MatchExcludes(child.FullName);
                 if (exclude != null) {
                     Log(depth + 1, ItemAction.Skip, child.Name, $"excluded ({exclude.Original})");
@@ -225,12 +225,12 @@ namespace Ftpush {
                 if (!DeleteFtpAny(child, depth + 1))
                     itemsRemain = true;
             }
+            EnsureRemoteWorkingDirectory(parentWorkingDirectory);
             if (itemsRemain) {
                 Log(depth + 1, ItemAction.Skip, $"# dir '{remote.Name}' not deleted (items remain)");
                 return false;
             }
 
-            EnsureRemoteWorkingDirectory(parentWorkingDirectory);
             FtpRetry.Call(() => _mainClient.DeleteDirectory(remote.Name));
             return true;
         }

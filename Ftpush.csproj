@@ -57,12 +57,23 @@
       <HintPath>packages\JetBrains.Annotations.10.2.1\lib\net\JetBrains.Annotations.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Minimatch, Version=2.0.0.0, Culture=neutral, PublicKeyToken=0cadeb0b849c27c0, processorArchitecture=MSIL">
+      <HintPath>packages\Minimatch.2.0.0\lib\netstandard1.0\Minimatch.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="MSBuild.AutoILMerge.Task, Version=1.0.0.0, Culture=en-US, processorArchitecture=MSIL">
       <HintPath>packages\MSBuild.AutoILMerge.Task.1.1.0\lib\net40\MSBuild.AutoILMerge.Task.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Core" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime.InteropServices.RuntimeInformation, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.Runtime.InteropServices.RuntimeInformation.4.0.0\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System.Web" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -76,8 +87,11 @@
     <Compile Include="Internal\FtpClientExtensions.cs" />
     <Compile Include="Internal\FtpClientLease.cs" />
     <Compile Include="Internal\FtpClientPool.cs" />
+    <Compile Include="Internal\FtpPath.cs" />
+    <Compile Include="Internal\LocalDirectory.cs" />
     <Compile Include="Internal\FtpRetry.cs" />
-    <Compile Include="Internal\GlobHelper.cs" />
+    <Compile Include="Internal\LocalFile.cs" />
+    <Compile Include="Internal\LocalItem.cs" />
     <Compile Include="Process.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

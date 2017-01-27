@@ -61,16 +61,16 @@ namespace Ftpush {
                 FtpTrace.AddListener(new ConsoleTraceListener());
 
             var ftpUrl = new Uri(args.FtpUrl);
-            var password = Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
-            if (string.IsNullOrEmpty(password))
-                throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine vars are ignored).");
+            var password = "***REMOVED***";//Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
+            //if (string.IsNullOrEmpty(password))
+            //    throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine vars are ignored).");
 
             FluentConsole.White.Line(ftpUrl);
             var started = DateTime.Now;
 
             var basePath = ftpUrl.LocalPath;
             var credentials = new NetworkCredential(args.FtpUserName, password);
-            var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
+            var sourceInfo = System.IO.Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
             using (var mainClient = CreateFtpClient(ftpUrl, credentials, args.FtpUseActive))
             using (var backgroundPool = new FtpClientPool(() => FtpRetry.Call(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive)), args.BackgroundConnectionCount))

@@ -61,9 +61,9 @@ namespace Ftpush {
                 FtpTrace.AddListener(new ConsoleTraceListener());
 
             var ftpUrl = new Uri(args.FtpUrl);
-            var password = "***REMOVED***";//Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
-            //if (string.IsNullOrEmpty(password))
-            //    throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine vars are ignored).");
+            var password = Environment.GetEnvironmentVariable(args.FtpPasswordVariableName, EnvironmentVariableTarget.Process);
+            if (string.IsNullOrEmpty(password))
+                throw new ArgumentValidationException($"Password env variable '{args.FtpPasswordVariableName}' is not set for the current process (user/machine vars are ignored).");
 
             FluentConsole.White.Line(ftpUrl);
             var started = DateTime.Now;

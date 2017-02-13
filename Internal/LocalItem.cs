@@ -4,6 +4,7 @@ namespace Ftpush.Internal {
     public abstract class LocalItem {
         private readonly FileSystemInfo _info;
 
+        public string AbsolutePath => _info.FullName;
         public string RelativePath { get; }
         public int Depth { get; }
         public string Name => _info.Name;

@@ -202,7 +202,7 @@ namespace Ftpush {
         }
 
         private void PushFile(LocalFile localFile, string ftpPath, FtpClient client) {
-            FtpRetry.ConnectedCall(client, c => c.UploadFile(localFile.FullPath, ftpPath));
+            FtpRetry.ConnectedCall(client, c => c.UploadFile(localFile.AbsolutePath, ftpPath));
             FtpRetry.ConnectedCall(client, c => c.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
         }
 

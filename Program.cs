@@ -70,10 +70,10 @@ namespace Ftpush {
 
             var basePath = ftpUrl.LocalPath;
             var credentials = new NetworkCredential(args.FtpUserName, password);
-            var sourceInfo = System.IO.Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
+            var sourceInfo = Directory.Exists(args.SourcePath) ? (FileSystemInfo)new DirectoryInfo(args.SourcePath) : new FileInfo(args.SourcePath);
 
-            using (var mainClient = CreateFtpClient(ftpUrl, credentials, args.FtpUseActive))
-            using (var backgroundPool = new FtpClientPool(() => FtpRetry.Call(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive)), args.BackgroundConnectionCount))
+            using (var mainClient = CreateFtpClient(ftpUrl, credentials, args.FtpUseActive, retry: args.InterimFtpRetryLogin))
+            using (var backgroundPool = new FtpClientPool(() => CreateFtpClient(ftpUrl, credentials, args.FtpUseActive, retry: true), args.BackgroundConnectionCount))
             using (var process = new Process(mainClient, backgroundPool, args.Excludes.AsReadOnlyList())) {
                 process.SynchronizeTopLevel(sourceInfo, basePath);
             }
@@ -81,7 +81,7 @@ namespace Ftpush {
             FluentConsole.NewLine().Green.Line(@"Finished in {0:dd\.hh\:mm\:ss}.", DateTime.Now - started);
         }
 
-        private static FtpClient CreateFtpClient(Uri url, NetworkCredential credentials, bool active) {
+        private static FtpClient CreateFtpClient(Uri url, NetworkCredential credentials, bool active, bool retry) {
             var encryptionMode = FtpEncryptionMode.None;
             if (url.Scheme.Equals("ftps", StringComparison.OrdinalIgnoreCase)) {
                 encryptionMode = FtpEncryptionMode.Explicit;
@@ -100,7 +100,12 @@ namespace Ftpush {
                     Credentials = credentials,
                     SslProtocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12
                 };
-                client.Connect();
+                if (retry) {
+                    FtpRetry.ConnectedCall(client, c => { /* ConnectedCall will call Connect() for us */ });
+                }
+                else {
+                    client.Connect();
+                }
                 return client;
             }
             catch (Exception) {

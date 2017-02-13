@@ -56,7 +56,7 @@ namespace Ftpush {
                 if (_mainClient.GetObjectInfo(ftpPath) != null)
                     DeleteFtpFile(ftpPathObject);
                 Log(0, ItemAction.Add, localAsDirectory.Name);
-                FtpRetry.Call(() => _mainClient.CreateDirectory(localAsDirectory.Name));
+                FtpRetry.ConnectedCall(_mainClient, c => c.CreateDirectory(localAsDirectory.Name));
                 PushDirectoryContents(new LocalDirectory(localAsDirectory, "", 0), ftpPathObject);
                 return;
             }
@@ -169,7 +169,7 @@ namespace Ftpush {
 
         private void PushDirectory(LocalDirectory localDirectory, FtpPath ftpParentPath) {
             var ftpPath = ftpParentPath.GetChildPath(localDirectory.Name);
-            FtpRetry.Call(() => _mainClient.CreateDirectory(localDirectory.Name));
+            FtpRetry.ConnectedCall(_mainClient, c => c.CreateDirectory(localDirectory.Name));
             PushDirectoryContents(localDirectory, ftpPath);
         }
 
@@ -194,7 +194,7 @@ namespace Ftpush {
             using (var pushLease = _backgroundPool.LeaseClient()) {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
-                    FtpRetry.Call(() => pushLease.Client.SetWorkingDirectory(remoteWorkingDirectory));
+                    FtpRetry.ConnectedCall(pushLease.Client, c => c.SetWorkingDirectory(remoteWorkingDirectory));
                     PushFile(localFile, localFile.Name, pushLease.Client);
                 }).ConfigureAwait(false);
                 // ReSharper restore AccessToDisposedClosure
@@ -202,11 +202,8 @@ namespace Ftpush {
         }
 
         private void PushFile(LocalFile localFile, string ftpPath, FtpClient client) {
-            using (var readStream = localFile.OpenRead())
-            using (var writeStream = FtpRetry.Call(() => client.OpenWrite(ftpPath))) {
-                readStream.CopyTo(writeStream, 256*1024);
-            }
-            FtpRetry.Call(() => client.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
+            FtpRetry.ConnectedCall(client, c => c.UploadFile(localFile.FullPath, ftpPath));
+            FtpRetry.ConnectedCall(client, c => c.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
         }
 
         private bool DeleteFtpAny(FtpPath path, FtpFileSystemObjectType type) {
@@ -241,21 +238,20 @@ namespace Ftpush {
                 Log(path.Depth + 1, ItemAction.Skip, $"# dir '{path.Name}' not deleted (items remain)");
                 return false;
             }
-
-            FtpRetry.Call(() => _mainClient.DeleteDirectory(path.Name));
+            FtpRetry.ConnectedCall(_mainClient, c => c.DeleteDirectory(path.Name));
             return true;
         }
         
         private void DeleteFtpFile(FtpPath path) {
             Log(path.Depth, ItemAction.Delete, path.Name);
-            FtpRetry.Call(() => _mainClient.DeleteFile(path.Name));
+            FtpRetry.ConnectedCall(_mainClient, c => c.DeleteFile(path.Name));
         }
 
         private void EnsureRemoteWorkingDirectory(string absolutePath, int? retryCount = null) {
             if (_remoteWorkingDirectory == absolutePath)
                 return;
 
-            FtpRetry.Call(() => _mainClient.SetWorkingDirectory(absolutePath), retryCount);
+            FtpRetry.ConnectedCall(_mainClient, c => c.SetWorkingDirectory(absolutePath), retryCount);
             _remoteWorkingDirectory = absolutePath;
         }
 

@@ -25,6 +25,10 @@ namespace Ftpush {
         public bool FtpUseActive { get; set; } = false;
 
         [UsedImplicitly(ImplicitUseKindFlags.Assign)]
+        [Option("interim-retry-login", HelpText = "(Interim, will be moved to config) Retry initial login.", DefaultValue = false)]
+        public bool InterimFtpRetryLogin { get; set; } = false;
+
+        [UsedImplicitly(ImplicitUseKindFlags.Assign)]
         [OptionArray('x', "exclude", HelpText = "Excluded patterns: those will not be copied from source or deleted from target.")]
         public string[] Excludes { get; set; } = new string[0];
 

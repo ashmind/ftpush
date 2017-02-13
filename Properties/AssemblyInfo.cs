@@ -35,6 +35,6 @@ using Ftpush.Properties;
 namespace Ftpush.Properties {
     internal static class AssemblyVersion {
         public const string VersionString = "0.8.0";
-        public const string VersionSuffix = "-pre-02";
+        public const string VersionSuffix = "-pre-03";
     }
 }

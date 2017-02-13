@@ -11,6 +11,6 @@ namespace Ftpush.Internal {
 
         public DateTime LastWriteTime => _info.LastWriteTime;
         public DateTime LastWriteTimeUtc => _info.LastWriteTimeUtc;
-        public FileStream OpenRead() => _info.OpenRead();
+        public string FullPath => _info.FullName;
     }
 }

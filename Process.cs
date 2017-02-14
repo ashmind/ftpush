@@ -194,15 +194,24 @@ namespace Ftpush {
             using (var pushLease = _backgroundPool.LeaseClient()) {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
-                    FtpRetry.ConnectedCall(pushLease.Client, c => c.SetWorkingDirectory(remoteWorkingDirectory));
-                    PushFile(localFile, localFile.Name, pushLease.Client);
+                    try {
+                        FtpRetry.ConnectedCall(pushLease.Client, c => c.SetWorkingDirectory(remoteWorkingDirectory));
+                        PushFile(localFile, localFile.Name, pushLease.Client);
+                    }
+                    catch (Exception ex) {
+                        throw new Exception($"Failed to push file '{localFile.RelativePath}': {ex.Message}", ex);
+                    }
                 }).ConfigureAwait(false);
                 // ReSharper restore AccessToDisposedClosure
             }
         }
 
         private void PushFile(LocalFile localFile, string ftpPath, FtpClient client) {
-            FtpRetry.ConnectedCall(client, c => c.UploadFile(localFile.AbsolutePath, ftpPath));
+            // https://github.com/hgupta9/FluentFTP/issues/46
+            using (var readStream = localFile.OpenRead())
+            using (var writeStream = FtpRetry.ConnectedCall(client, c => c.OpenWrite(ftpPath))) {
+                readStream.CopyTo(writeStream, 256 * 1024);
+            }
             FtpRetry.ConnectedCall(client, c => c.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
         }
 

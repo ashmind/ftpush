@@ -22,7 +22,7 @@ namespace Ftpush.Internal {
         }
 
         public static T ConnectedCall<T>(FtpClient client, Func<FtpClient, T> func, int? retryCount = null) {
-            retryCount = retryCount ?? 10;
+            retryCount = retryCount ?? 30;
             var currentRetryCount = 0;
             var hadLoginException = false;
             while (true) {
@@ -33,13 +33,11 @@ namespace Ftpush.Internal {
                 }
                 catch (Exception ex) when (CanRetry(ex) && currentRetryCount < retryCount) {
                     hadLoginException = ((ex as FtpCommandException)?.CompletionCode == ReturnCodes.NotLoggedIn);
-                    Wait();
+                    Thread.Sleep(currentRetryCount > 0 ? 1000 : 500);
                 }
                 currentRetryCount += 1;
             }
         }
-
-        private static void Wait() => Thread.Sleep(1000);
 
         private static bool CanRetry(Exception exception) {
             var ftpException = exception as FtpCommandException;

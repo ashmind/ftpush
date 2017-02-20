@@ -101,7 +101,7 @@ namespace Ftpush {
                     SslProtocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12
                 };
                 if (retry) {
-                    FtpRetry.ConnectedCall(client, c => { /* ConnectedCall will call Connect() for us */ });
+                    FtpRetry.ConnectedCall(client, "/", c => { /* ConnectedCall will call Connect() for us */ });
                 }
                 else {
                     client.Connect();

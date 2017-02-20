@@ -46,7 +46,7 @@ namespace Ftpush {
             if (!remoteIsDirectory) {
                 if (localAsDirectory == null) {
                     Log(0, ItemAction.Replace, local.Name);
-                    PushFile(new LocalFile((FileInfo)local, local.Name, 0), ftpPath, _mainClient);
+                    PushFile(new LocalFile((FileInfo)local, local.Name, 0), "/", ftpPath, _mainClient);
                     return;
                 }
 
@@ -56,7 +56,7 @@ namespace Ftpush {
                 if (_mainClient.GetObjectInfo(ftpPath) != null)
                     DeleteFtpFile(ftpPathObject);
                 Log(0, ItemAction.Add, localAsDirectory.Name);
-                FtpRetry.ConnectedCall(_mainClient, c => c.CreateDirectory(localAsDirectory.Name));
+                FtpRetry.ConnectedCall(_mainClient, "/", c => c.CreateDirectory(localAsDirectory.Name));
                 PushDirectoryContents(new LocalDirectory(localAsDirectory, "", 0), ftpPathObject);
                 return;
             }
@@ -169,7 +169,7 @@ namespace Ftpush {
 
         private void PushDirectory(LocalDirectory localDirectory, FtpPath ftpParentPath) {
             var ftpPath = ftpParentPath.GetChildPath(localDirectory.Name);
-            FtpRetry.ConnectedCall(_mainClient, c => c.CreateDirectory(localDirectory.Name));
+            FtpRetry.ConnectedCall(_mainClient, ftpParentPath.Absolute, c => c.CreateDirectory(localDirectory.Name));
             PushDirectoryContents(localDirectory, ftpPath);
         }
 
@@ -195,8 +195,8 @@ namespace Ftpush {
                 // ReSharper disable AccessToDisposedClosure
                 await Task.Run(() => {
                     try {
-                        FtpRetry.ConnectedCall(pushLease.Client, c => c.SetWorkingDirectory(remoteWorkingDirectory));
-                        PushFile(localFile, localFile.Name, pushLease.Client);
+                        FtpRetry.ConnectedCall(pushLease.Client, "/", c => c.SetWorkingDirectory(remoteWorkingDirectory));
+                        PushFile(localFile, remoteWorkingDirectory, localFile.Name, pushLease.Client);
                     }
                     catch (Exception ex) {
                         throw new Exception($"Failed to push file '{localFile.RelativePath}': {ex.Message}", ex);
@@ -206,13 +206,13 @@ namespace Ftpush {
             }
         }
 
-        private void PushFile(LocalFile localFile, string ftpPath, FtpClient client) {
+        private void PushFile(LocalFile localFile, string ftpParentPath, string ftpPath, FtpClient client) {
             // https://github.com/hgupta9/FluentFTP/issues/46
             using (var readStream = localFile.OpenRead())
-            using (var writeStream = FtpRetry.ConnectedCall(client, c => c.OpenWrite(ftpPath))) {
+            using (var writeStream = FtpRetry.ConnectedCall(client, ftpParentPath, c => c.OpenWrite(ftpPath))) {
                 readStream.CopyTo(writeStream, 256 * 1024);
             }
-            FtpRetry.ConnectedCall(client, c => c.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
+            FtpRetry.ConnectedCall(client, ftpParentPath, c => c.SetModifiedTime(ftpPath, localFile.LastWriteTimeUtc));
         }
 
         private bool DeleteFtpAny(FtpPath path, FtpFileSystemObjectType type) {
@@ -247,20 +247,20 @@ namespace Ftpush {
                 Log(path.Depth + 1, ItemAction.Skip, $"# dir '{path.Name}' not deleted (items remain)");
                 return false;
             }
-            FtpRetry.ConnectedCall(_mainClient, c => c.DeleteDirectory(path.Name));
+            FtpRetry.ConnectedCall(_mainClient, parentWorkingDirectory, c => c.DeleteDirectory(path.Name));
             return true;
         }
         
         private void DeleteFtpFile(FtpPath path) {
             Log(path.Depth, ItemAction.Delete, path.Name);
-            FtpRetry.ConnectedCall(_mainClient, c => c.DeleteFile(path.Name));
+            FtpRetry.ConnectedCall(_mainClient, _remoteWorkingDirectory, c => c.DeleteFile(path.Name));
         }
 
         private void EnsureRemoteWorkingDirectory(string absolutePath, int? retryCount = null) {
             if (_remoteWorkingDirectory == absolutePath)
                 return;
 
-            FtpRetry.ConnectedCall(_mainClient, c => c.SetWorkingDirectory(absolutePath), retryCount);
+            FtpRetry.ConnectedCall(_mainClient, "/", c => c.SetWorkingDirectory(absolutePath), retryCount);
             _remoteWorkingDirectory = absolutePath;
         }
 

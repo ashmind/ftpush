@@ -14,21 +14,24 @@ namespace Ftpush.Internal {
             ReturnCodes.FileNotAvailable
         };
 
-        public static void ConnectedCall(FtpClient client, Action<FtpClient> action, int? retryCount = null) {
-            ConnectedCall<object>(client, c => {
+        public static void ConnectedCall(FtpClient client, string workingDirectoryPath, Action<FtpClient> action, int? retryCount = null) {
+            ConnectedCall<object>(client, workingDirectoryPath, c => {
                 action(c);
                 return null;
             }, retryCount);
         }
 
-        public static T ConnectedCall<T>(FtpClient client, Func<FtpClient, T> func, int? retryCount = null) {
+        public static T ConnectedCall<T>(FtpClient client, string workingDirectoryPath, Func<FtpClient, T> func, int? retryCount = null) {
             retryCount = retryCount ?? 30;
             var currentRetryCount = 0;
             var hadLoginException = false;
             while (true) {
                 try {
-                    if (!client.IsConnected || hadLoginException)
+                    if (!client.IsConnected || hadLoginException) {
                         client.Connect();
+                        if (workingDirectoryPath != "/")
+                            client.SetWorkingDirectory(workingDirectoryPath);
+                    }
                     return func(client);
                 }
                 catch (Exception ex) when (CanRetry(ex) && currentRetryCount < retryCount) {

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using System.Threading;
 using FluentFTP;
 
@@ -45,7 +46,9 @@ namespace Ftpush.Internal {
         private static bool CanRetry(Exception exception) {
             var ftpException = exception as FtpCommandException;
             return ftpException != null && CanRetryReturnCode.Contains(ftpException.CompletionCode)
-                || (exception is TimeoutException);
+                || (exception is TimeoutException)
+                || (exception is SocketException)
+                || (exception.InnerException != null && CanRetry(exception.InnerException));
         }
     }
 }

@@ -73,7 +73,8 @@ namespace Ftpush {
             Log(localDirectory.Depth, ItemAction.Synchronize, localDirectory.Name);
 
             EnsureRemoteWorkingDirectory(ftpPath.Absolute);
-            var allRemote = _mainClient.GetListing(".", FtpListOption.AllFiles).ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
+            var allRemote = FtpRetry.ConnectedCall(_mainClient, ftpPath.Absolute, c => c.GetListing(".", FtpListOption.AllFiles))
+                .ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
             var allRemoteFound = new HashSet<FtpListItem>();
 
             var pushTasks = new List<Task>();
